@@ -16,6 +16,7 @@
 #include "aurora/aurora.h"
 #include "ascii/ascii.h"
 #include "snow/snow.h"
+#include "oled/oled.h"
 
 #define BTN_H   56
 #define BTN_GAP 10
@@ -35,8 +36,10 @@ static Rectangle BtnRect(int i, float scroll) {
 }
 
 int main(void) {
+    SetTraceLogLevel(LOG_WARNING);   // LoadImageFromTexture logs every frame at INFO
     InitWindow(WIN_W, WIN_H, "Robot Face Animations");
     SetTargetFPS(60);
+    RenderTexture2D screen = LoadRenderTexture(FRAME_W, FRAME_H);
 
     int current = 0;
     Face cur = face_default();
@@ -47,6 +50,9 @@ int main(void) {
         float dt = GetFrameTime();
         t += dt;
         stateT += dt;
+
+        // The UNO's pushbutton goes to the next animation
+        if (oled_poll() > 0) { current = (current + 1) % ANIM_COUNT; stateT = 0; }
 
         // Sidebar input
         Vector2 m = GetMousePosition();
@@ -72,14 +78,21 @@ int main(void) {
         float bt = t - blinkStart;
         if (bt >= 0 && bt < 0.16f) blink = fmaxf(0.06f, fabsf(bt / 0.08f - 1.0f));
 
+        // Robot screen (800x600), drawn off screen so the OLED can get a copy
+        BeginTextureMode(screen);
+            ClearBackground((Color){ 6, 8, 12, 255 });
+            ANIMS[current]->draw(&cur, t, stateT, blink, 0, 0);
+        EndTextureMode();
+
+        if (oled_ready()) {
+            Image frame = LoadImageFromTexture(screen.texture);
+            oled_send(&frame);
+            UnloadImage(frame);
+        }
+
         BeginDrawing();
         ClearBackground((Color){ 28, 30, 36, 255 });
-
-        // Robot screen (800x600)
-        BeginScissorMode(SIDEBAR_W, 0, FRAME_W, FRAME_H);
-            DrawRectangle(SIDEBAR_W, 0, FRAME_W, FRAME_H, (Color){ 6, 8, 12, 255 });
-            ANIMS[current]->draw(&cur, t, stateT, blink, SIDEBAR_W, 0);
-        EndScissorMode();
+        DrawTextureRec(screen.texture, (Rectangle){ 0, 0, FRAME_W, -FRAME_H }, (Vector2){ SIDEBAR_W, 0 }, WHITE);
 
         // Sidebar (200x600, scrollable)
         BeginScissorMode(0, 0, SIDEBAR_W, WIN_H);
@@ -104,6 +117,8 @@ int main(void) {
         EndDrawing();
     }
 
+    oled_close();
+    UnloadRenderTexture(screen);
     CloseWindow();
     return 0;
 }

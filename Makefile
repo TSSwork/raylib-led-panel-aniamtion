@@ -25,10 +25,29 @@ $(BUILD)/%.o: %.c
 clean:
 	rm -rf $(BUILD)
 
-run: $(TARGET)
+# Run the desktop app alone. It finds the UNO by itself if one is plugged in
+desktop: $(TARGET)
 	./$(TARGET)
+
+# Arduino sketch for the UNO + OLED
+FQBN   = arduino:avr:uno
+SKETCH = sketch
+PORT  ?= $(firstword $(wildcard /dev/ttyACM* /dev/ttyUSB*))
+
+compile:
+	arduino-cli compile --fqbn $(FQBN) --build-path $(BUILD)/sketch $(SKETCH)
+
+# A missing board is not an error, the desktop app works without it
+upload: compile
+	@if [ -z "$(PORT)" ]; then echo "No board found, skipping upload"; \
+	else arduino-cli upload --fqbn $(FQBN) -p $(PORT) --input-dir $(BUILD)/sketch $(SKETCH) \
+	     || echo "Upload failed, continuing without the board"; fi
+
+# Compile the sketch, upload it, then start the desktop app
+run: upload
+	$(MAKE) --no-print-directory desktop
 
 # Pull in the generated header dependency files
 -include $(DEP)
 
-.PHONY: all clean run
+.PHONY: all clean run desktop compile upload
