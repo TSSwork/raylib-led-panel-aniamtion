@@ -50,3 +50,34 @@ void draw_mouth(const Face *f, float shake, int ox, int oy) {
         prev = p;
     }
 }
+
+float clampf(float v, float lo, float hi) {
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+void draw_dot_matrix(int ox, int oy, float size, int dots, float scale,
+                     float t, Color color, DotIntensityFn intensity) {
+    int grid = dots < 3 ? 3 : dots;
+    float half = (grid - 1) / 2.0f;
+    float spacing = (size * 0.74f) / (grid - 1);
+    float maxRadius = spacing * 0.6f;
+    float cx = ox + FRAME_W * 0.5f;
+    float cy = oy + FRAME_H * 0.5f;
+
+    for (int iy = 0; iy < grid; iy++) {
+        for (int ix = 0; ix < grid; ix++) {
+            float nx = (ix - half) / half;
+            float ny = (iy - half) / half;
+            float d = hypotf(nx, ny);
+            if (d > 1.12f) continue;   // this cutoff is what makes the outline round
+
+            float v = clampf(intensity(d, nx, ny, t), 0.0f, 1.0f);
+            float radius = maxRadius * expf(-d * d * 1.7f) * v * scale;
+            if (radius < 0.5f) continue;
+
+            Vector2 p = { cx + (ix - half) * spacing * scale,
+                          cy + (iy - half) * spacing * scale };
+            DrawCircleV(p, radius, color);
+        }
+    }
+}

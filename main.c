@@ -9,6 +9,7 @@
 #include "face_happy/face_happy.h"
 #include "face_error/face_error.h"
 #include "face_sleep/face_sleep.h"
+#include "matrix_thinking/matrix_thinking.h"
 
 #define BTN_H   56
 #define BTN_GAP 10
@@ -17,7 +18,7 @@
 // The order here is the order of the sidebar buttons.
 static const Animation *ANIMS[] = {
     &anim_idle, &anim_listening, &anim_thinking, &anim_speaking,
-    &anim_happy, &anim_error, &anim_sleep,
+    &anim_happy, &anim_error, &anim_sleep, &anim_matrix_thinking,
 };
 #define ANIM_COUNT ((int)(sizeof(ANIMS) / sizeof(ANIMS[0])))
 
