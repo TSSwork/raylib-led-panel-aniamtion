@@ -2,6 +2,12 @@
 
 Robot-face animations written in C with [raylib](https://www.raylib.com/). The 14 animations play in a desktop window and can also be mirrored on a 0.96" SSD1306 OLED connected to an Arduino UNO. A pushbutton on the UNO steps through the animations.
 
+## Demo
+
+<video src="video.mp4" controls muted width="100%"></video>
+
+If the video does not play, [open video.mp4](video.mp4).
+
 ## Animations
 
 Idle, Listening, Thinking, Speaking, Happy, Error, Sleep, Orb Thinking, Fireworks, Radar, Rings, Aurora, ASCII, Snow.
