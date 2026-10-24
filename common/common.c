@@ -55,6 +55,10 @@ float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+float randf(float lo, float hi) {
+    return lo + (hi - lo) * (GetRandomValue(0, 10000) / 10000.0f);
+}
+
 void draw_dot_matrix(int ox, int oy, float size, int dots, float scale,
                      float t, Color color, DotIntensityFn intensity) {
     int grid = dots < 3 ? 3 : dots;

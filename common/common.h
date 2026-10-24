@@ -32,6 +32,7 @@ Face  face_default(void);
 void  face_ease(Face *cur, const Face *tgt, float dt);
 Color face_color(const Face *f);
 float clampf(float v, float lo, float hi);
+float randf(float lo, float hi);
 
 // Shared drawing helpers, coordinates are in 800x600 space offset by (ox, oy).
 void draw_eyes(const Face *f, float blink, float shake, int ox, int oy);
