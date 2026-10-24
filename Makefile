@@ -1,22 +1,34 @@
-# Simple Makefile for Raylib with Wayland on Fedora
-CC = gcc
-CFLAGS = -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces
-TARGET = build/ai-avatar
-SRC = main.c
+# Raylib with Wayland on Fedora
+CC      = gcc
+CFLAGS  = -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces -MMD -MP
+BUILD   = build
+TARGET  = $(BUILD)/ai-avatar
+
+SRC = $(wildcard *.c)
+OBJ = $(SRC:%.c=$(BUILD)/%.o)
+DEP = $(OBJ:.o=.d)
 
 # Libraries needed for Wayland support
 LIBS = -lraylib -lwayland-client -lwayland-cursor -lwayland-egl -lxkbcommon -lGL -lm -lpthread -ldl -lrt
 
-# Default build rule
 all: $(TARGET)
 
-$(TARGET): $(SRC)
-	$(CC) $(SRC) -o $(TARGET) $(CFLAGS) $(LIBS)
+$(TARGET): $(OBJ)
+	$(CC) $(OBJ) -o $@ $(LIBS)
 
-# Clean up build files
+$(BUILD)/%.o: %.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD):
+	mkdir -p $(BUILD)
+
 clean:
-	rm -f $(TARGET)
+	rm -rf $(BUILD)
 
-# Run the application
 run: $(TARGET)
 	./$(TARGET)
+
+# Pull in the generated header dependency files
+-include $(DEP)
+
+.PHONY: all clean run
