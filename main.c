@@ -1,14 +1,14 @@
 #include "raylib.h"
 #include <math.h>
 
-#include "common.h"
-#include "face_idle.h"
-#include "face_listening.h"
-#include "face_thinking.h"
-#include "face_speaking.h"
-#include "face_happy.h"
-#include "face_error.h"
-#include "face_sleep.h"
+#include "common/common.h"
+#include "face_idle/face_idle.h"
+#include "face_listening/face_listening.h"
+#include "face_thinking/face_thinking.h"
+#include "face_speaking/face_speaking.h"
+#include "face_happy/face_happy.h"
+#include "face_error/face_error.h"
+#include "face_sleep/face_sleep.h"
 
 #define BTN_H   56
 #define BTN_GAP 10

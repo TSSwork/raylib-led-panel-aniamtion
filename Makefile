@@ -1,10 +1,11 @@
 # Raylib with Wayland on Fedora
 CC      = gcc
-CFLAGS  = -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces -MMD -MP
+CFLAGS  = -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces -MMD -MP -I.
 BUILD   = build
 TARGET  = $(BUILD)/ai-avatar
 
-SRC = $(wildcard *.c)
+# main.c in the root plus every .c file one folder down
+SRC = $(wildcard *.c) $(wildcard */*.c)
 OBJ = $(SRC:%.c=$(BUILD)/%.o)
 DEP = $(OBJ:.o=.d)
 
@@ -16,11 +17,10 @@ all: $(TARGET)
 $(TARGET): $(OBJ)
 	$(CC) $(OBJ) -o $@ $(LIBS)
 
-$(BUILD)/%.o: %.c | $(BUILD)
+# Creates the matching folder inside build before compiling each file
+$(BUILD)/%.o: %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD):
-	mkdir -p $(BUILD)
 
 clean:
 	rm -rf $(BUILD)
