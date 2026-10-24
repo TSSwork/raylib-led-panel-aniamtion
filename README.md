@@ -4,7 +4,7 @@ Robot-face animations written in C with [raylib](https://www.raylib.com/). The 1
 
 ## Demo
 
-<video src="video.mp4" controls muted width="100%"></video>
+https://github.com/user-attachments/assets/ffdfd53f-e5c9-45d6-ae04-2f572b3ade20
 
 If the video does not play, [open video.mp4](video.mp4).
 
