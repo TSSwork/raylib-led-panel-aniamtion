@@ -1,208 +1,216 @@
-#include <time.h>
+#include "raylib.h"
 #include <math.h>
 #include <stdlib.h>
-#include <raylib.h>
-#include <rlgl.h>
 
-#define SCREEN_WIDTH 800
-#define SCREEN_HEIGHT 800
+#define SIDEBAR_W 200
+#define FRAME_W   800
+#define FRAME_H   600
+#define WIN_W     (SIDEBAR_W + FRAME_W)
+#define WIN_H     FRAME_H
 
-Color priamry = {230, 41, 55, 255};
-Color secondary = {10, 0, 0, 255};
-Font clock_font;
-float clock_radius = (float)SCREEN_WIDTH/2 - 200;
+#define BTN_H     56
+#define BTN_GAP   10
+#define BTN_PAD   12
 
-int digits[10][7] = {
-    {1,1,1,0,1,1,1}, //0
-    {0,0,1,0,0,1,0}, //1
-    {1,0,1,1,1,0,1}, //2
-    {1,0,1,1,0,1,1}, //3
-    {0,1,1,1,0,1,0}, //4
-    {1,1,0,1,0,1,1}, //5
-    {1,1,0,1,1,1,1}, //6
-    {0,0,1,0,0,1,1}, //7
-    {1,1,1,1,1,1,1}, //8
-    {1,1,1,1,0,1,1}, //9
+typedef enum {
+    ST_IDLE, ST_LISTENING, ST_THINKING, ST_SPEAKING,
+    ST_HAPPY, ST_ERROR, ST_SLEEP, ST_COUNT
+} State;
+
+static const char *STATE_NAMES[ST_COUNT] = {
+    "Idle", "Listening", "Thinking", "Speaking", "Happy", "Error", "Sleep"
 };
 
-void draw_digit_hand(Vector2 center,int length, int height, int triangle_height, int angle, bool on){
-    float half_l = length / 2.0f;
-    float half_h = height / 2.0f;
-    float end_l =  half_l + triangle_height;
+// All fields are floats so the whole face can be eased smoothly between states.
+typedef struct {
+    float eyeW, eyeH, gap;
+    float lookX, lookY;
+    float mouthW, mouthCurve, mouthOpen;
+    float r, g, b;
+} Face;
 
-    Vector2 a = { center.x - end_l , center.y }; // 0
-    Vector2 b = { center.x - half_l , center.y + half_h };  // 1
-    Vector2 c = { center.x - half_l, center.y - half_h }; // 2
-    Vector2 d = { center.x + half_l, center.y + half_h }; // 3
-    Vector2 e = { center.x + half_l, center.y - half_h }; // 4
-    Vector2 f = { center.x + end_l, center.y }; // 5
-
-    Vector2 points[] = { a, b, c, d, e, f };
-    int count = sizeof(points)/sizeof(points[0]);
-
-    rlPushMatrix();
-        rlTranslatef(center.x, center.y, 0);
-        rlRotatef(angle, 0, 0, 1);
-        rlTranslatef(-center.x, -center.y, 0);
-        DrawTriangleStrip(points, count, on ? priamry : secondary);
-    rlPopMatrix();
+static Face TargetFor(State s) {
+    Face f = { 130, 150, 300,  0, 0,  120, 0.25f, 0,  90, 220, 255 };
+    switch (s) {
+        case ST_IDLE: break;
+        case ST_LISTENING:
+            f.eyeW = 145; f.eyeH = 185; f.mouthW = 60; f.mouthCurve = 0;
+            f.r = 120; f.g = 255; f.b = 170; break;
+        case ST_THINKING:
+            f.lookX = -60; f.lookY = -55; f.eyeH = 110; f.mouthW = 50; f.mouthCurve = 0;
+            f.r = 255; f.g = 200; f.b = 90; break;
+        case ST_SPEAKING:
+            f.mouthW = 170; f.mouthCurve = 0.1f; break;
+        case ST_HAPPY:
+            f.mouthW = 190; f.mouthCurve = 0.9f;
+            f.r = 255; f.g = 150; f.b = 200; break;
+        case ST_ERROR:
+            f.eyeW = 150; f.eyeH = 70; f.mouthW = 150; f.mouthCurve = -0.6f;
+            f.r = 255; f.g = 80; f.b = 80; break;
+        case ST_SLEEP:
+            f.eyeH = 10; f.mouthW = 0;
+            f.r = 80; f.g = 100; f.b = 140; break;
+        default: break;
+    }
+    return f;
 }
 
-void draw_full_number(Vector2 position, int digit) {
-
-    int *digit_segments = digits[digit];
-
-    int length = 50;
-    int height = 20;
-    int triangle_height = 10;
-    int full_height = length + (triangle_height * 2);
-    int half_height = full_height / 2;
-    // top
-    draw_digit_hand((Vector2){position.x, position.y + full_height + 8}, length, height, triangle_height, 0, digit_segments[0]);
-    // top left
-    draw_digit_hand((Vector2){position.x - half_height - 4, position.y - half_height - 4}, length, height, triangle_height, 90, digit_segments[1]);
-    // top right
-    draw_digit_hand((Vector2){position.x + half_height + 4, position.y - half_height - 4}, length, height, triangle_height, 90, digit_segments[2]);
-    // center
-    draw_digit_hand((Vector2){position.x, position.y}, length, height, triangle_height, 0, digit_segments[3]);
-    // bottom left
-    draw_digit_hand((Vector2){position.x - half_height - 4, position.y + half_height + 4}, length, height, triangle_height, 90, digit_segments[4]);
-    // bottom right
-    draw_digit_hand((Vector2){position.x + half_height + 4, position.y + half_height + 4}, length, height, triangle_height, 90, digit_segments[5]);
-    //bottom
-    draw_digit_hand((Vector2){position.x, position.y - full_height - 8}, length, height, triangle_height, 0, digit_segments[6]);
-
+static void EaseFace(Face *cur, const Face *tgt, float dt) {
+    float k = 1.0f - expf(-9.0f * dt);
+    float *c = (float *)cur;
+    const float *t = (const float *)tgt;
+    for (int i = 0; i < (int)(sizeof(Face) / sizeof(float)); i++)
+        c[i] += (t[i] - c[i]) * k;
 }
 
-void draw_separator(Vector2 position) {
-    DrawRectangle(position.x, position.y - 20, 15, 15, RED);
-    DrawRectangle(position.x, position.y + 10, 15, 15, RED);
+static void DrawMouth(float cx, float cy, const Face *f, Color col) {
+    if (f->mouthW < 4) return;
+    float half = f->mouthW * 0.5f;
+    if (f->mouthOpen > 0.05f) {
+        DrawEllipse((int)cx, (int)cy, half * 0.6f, 6 + f->mouthOpen * 40, col);
+        return;
+    }
+    Vector2 prev = { 0 };
+    for (int i = 0; i <= 20; i++) {
+        float u = i / 10.0f - 1.0f;
+        Vector2 p = { cx + u * half, cy + f->mouthCurve * 45.0f * (1.0f - u * u) };
+        if (i > 0) DrawLineEx(prev, p, 8, col);
+        prev = p;
+    }
 }
 
-void analog_face(Vector2 position, float radius) {
-    //Face
-    DrawCircle(position.x, position.y, radius, WHITE);
-    // Markers
-    for (int i = 0; i < 60; i++) {
+// Everything is drawn in 800x600 space, offset by (ox, oy).
+static void DrawScene(State s, const Face *f, float t, float st, float blink, int ox, int oy) {
+    float cx = ox + FRAME_W * 0.5f;
+    float cy = oy + FRAME_H * 0.5f;
+    Color col = { (unsigned char)f->r, (unsigned char)f->g, (unsigned char)f->b, 255 };
 
-        int length = 10 + (i % 5 == 0 ? 10 : 0);
-        float angle = i * 6.0f * DEG2RAD - PI/2;
+    float shake = 0;
+    if (s == ST_ERROR) shake = sinf(st * 55.0f) * 12.0f * fmaxf(0.0f, 1.0f - st * 0.8f);
 
-        float end_x = position.x + cos(angle) * (radius - 10);
-        float end_y = position.y + sin(angle) * (radius - 10);
-        float start_x = position.x + cos(angle) * (radius - 10 - length);
-        float start_y = position.y + sin(angle) * (radius - 10 - length);
-        float number_x = position.x + cos(angle) * (radius + 20);
-        float number_y = position.y + sin(angle) * (radius + 20);
+    if (s == ST_LISTENING) {
+        for (int k = 0; k < 3; k++) {
+            float p = fmodf(t * 0.7f + k / 3.0f, 1.0f);
+            DrawRing((Vector2){ cx, cy }, 250 + p * 200, 256 + p * 200, 0, 360, 96, Fade(col, 1.0f - p));
+        }
+    }
 
-        // Minute Lines
-        DrawLineEx((Vector2){start_x, start_y}, (Vector2){end_x, end_y}, 2.0f, BLACK);
+    float ex = cx + shake + f->lookX;
+    float ey = cy - 40 + f->lookY;
+    float eh = f->eyeH * blink;
+    for (int i = 0; i < 2; i++) {
+        float x = ex + (i == 0 ? -f->gap * 0.5f : f->gap * 0.5f);
+        if (s == ST_HAPPY) {
+            DrawRing((Vector2){ x, ey + 30 }, 45, 75, 190, 350, 32, col);
+        } else {
+            Rectangle r = { x - f->eyeW * 0.5f, ey - eh * 0.5f, f->eyeW, eh };
+            DrawRectangleRounded(r, 0.5f, 12, col);
+        }
+    }
 
-        // Primary 12
-        if (i % 5 == 0) {
-            int hour = i / 5;
-            if (hour == 0) hour = 12;
+    DrawMouth(cx + shake, cy + 150, f, col);
 
-            const char* text = TextFormat("%d", hour);
-            float fontSize = 30.0f;
-            float spacing = 0.0f;
+    if (s == ST_THINKING) {
+        for (int i = 0; i < 3; i++) {
+            float b = fmaxf(0.0f, sinf(t * 6.0f - i * 0.9f));
+            DrawCircle((int)(cx + 190 + i * 36), (int)(cy - 190 - b * 18), 11, Fade(col, 0.5f + 0.5f * b));
+        }
+    }
 
-            // 2. Calculate text dimensions to center it properly
-            Vector2 textSize = MeasureTextEx(clock_font, text, fontSize, spacing);
-
-            // Adjust coordinates so the CENTER of the text is at number_x/y
-            Vector2 finalPos = {
-                number_x - textSize.x / 2.0f,
-                number_y - textSize.y / 2.0f
-            };
-
-            DrawTextEx(clock_font, text, finalPos, fontSize, spacing, WHITE);
-        }else{
-            DrawCircle(number_x, number_y, 1.0f, WHITE);
+    if (s == ST_SLEEP) {
+        for (int i = 0; i < 3; i++) {
+            float p = fmodf(t * 0.35f + i / 3.0f, 1.0f);
+            DrawText("Z", (int)(cx + 150 + p * 90), (int)(cy - 80 - p * 160), (int)(24 + p * 30), Fade(col, 1.0f - p));
         }
     }
 }
 
-void draw_hour_hand(Vector2 position, int length, int time) {
-    float angle = (float)time * (PI/21600) - PI/2;
-    Vector2 end = { position.x + length * cosf(angle), position.y + length * sinf(angle) };
-    DrawLineEx(position, end, 10.0f, BLACK);
+static Rectangle BtnRect(int i, float scroll) {
+    return (Rectangle){ BTN_PAD, BTN_PAD + i * (BTN_H + BTN_GAP) - scroll,
+                        SIDEBAR_W - 2 * BTN_PAD, BTN_H };
 }
 
-void draw_minute_hand(Vector2 position, int length, int time) {
-    float angle = (float)time * (PI/1800) - PI/2;
-    Vector2 end = { position.x + length * cosf(angle), position.y + length * sinf(angle) };
-    DrawLineEx(position, end, 5.0f, BLACK);
-}
-
-void draw_second_hand(Vector2 position, int length, int time) {
-    float angle = (float)time * (PI/30) - PI/2;
-    Vector2 end = { position.x + length * cosf(angle), position.y + length * sinf(angle) };
-    DrawLineEx(position, end, 2.5f, RED);
-}
-
-int main() {
-
-    int minutes_mid_x = SCREEN_WIDTH/2;
-    int hours_mid_x = minutes_mid_x - 250;
-    int seconds_mid_x = minutes_mid_x + 250;
-    float digital_clock_y = (float)SCREEN_HEIGHT/6;
-
-    float analog_clock_x = (float)SCREEN_WIDTH/2;
-    float analog_clock_y = (float)4*SCREEN_HEIGHT/6;
-
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Clock");
+int main(void) {
+    InitWindow(WIN_W, WIN_H, "Robot Face Animations");
     SetTargetFPS(60);
 
-    clock_font = LoadFont("font.ttf");
-    SetTextureFilter(clock_font.texture, TEXTURE_FILTER_BILINEAR);
+    State state = ST_IDLE;
+    Face cur = TargetFor(ST_IDLE);
+    float t = 0, stateT = 0, scroll = 0;
+    float nextBlink = 2.0f, blinkStart = -1.0f;
+    float nextGaze = 2.0f, gazeX = 0, gazeY = 0;
 
-    while (!WindowShouldClose())
-    {
-        time_t now = time(NULL);
-        struct tm *t = localtime(&now);
+    while (!WindowShouldClose()) {
+        float dt = GetFrameTime();
+        t += dt;
+        stateT += dt;
 
-        // Extract individual digits using math
-        int h_tens = t->tm_hour / 10;
-        int h_ones = t->tm_hour % 10;
+        // Sidebar input
+        Vector2 m = GetMousePosition();
+        float contentH = BTN_PAD + ST_COUNT * (BTN_H + BTN_GAP);
+        float maxScroll = fmaxf(0.0f, contentH - WIN_H);
+        if (m.x < SIDEBAR_W) scroll -= GetMouseWheelMove() * 40.0f;
+        scroll = fminf(fmaxf(scroll, 0.0f), maxScroll);
 
-        int m_tens = t->tm_min / 10;
-        int m_ones = t->tm_min % 10;
+        for (int i = 0; i < ST_COUNT; i++) {
+            bool clicked = m.x < SIDEBAR_W && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)
+                           && CheckCollisionPointRec(m, BtnRect(i, scroll));
+            if (clicked || IsKeyPressed(KEY_ONE + i)) { state = (State)i; stateT = 0; }
+        }
 
-        int s_tens = t->tm_sec / 10;
-        int s_ones = t->tm_sec % 10;
+        // Idle gaze wandering
+        if (state == ST_IDLE && t > nextGaze) {
+            gazeX = (float)GetRandomValue(-40, 40);
+            gazeY = (float)GetRandomValue(-25, 25);
+            nextGaze = t + 1.5f + GetRandomValue(0, 25) / 10.0f;
+        }
+
+        Face tgt = TargetFor(state);
+        if (state == ST_IDLE) { tgt.lookX = gazeX; tgt.lookY = gazeY; }
+        EaseFace(&cur, &tgt, dt);
+
+        Face shown = cur;
+        if (state == ST_SPEAKING) shown.mouthOpen = fmaxf(0.0f, sinf(t * 13.0f) * sinf(t * 4.1f));
+
+        // Blinking
+        if (t > nextBlink) { blinkStart = t; nextBlink = t + 2.0f + GetRandomValue(0, 30) / 10.0f; }
+        float blink = 1.0f;
+        float bt = t - blinkStart;
+        if (bt >= 0 && bt < 0.16f) blink = fmaxf(0.06f, fabsf(bt / 0.08f - 1.0f));
+        if (state == ST_SLEEP) blink = 1.0f;
 
         BeginDrawing();
-        ClearBackground(BLACK);
+        ClearBackground((Color){ 28, 30, 36, 255 });
 
-        // DIGITAL CLOCK
-        // hours
-        draw_full_number((Vector2){hours_mid_x - 55, digital_clock_y}, h_tens);
-        draw_full_number((Vector2){hours_mid_x + 55, digital_clock_y}, h_ones);
-        draw_separator((Vector2){hours_mid_x + 116, digital_clock_y});
-        // minutes
-        draw_full_number((Vector2){minutes_mid_x - 55, digital_clock_y}, m_tens);
-        draw_full_number((Vector2){minutes_mid_x + 55, digital_clock_y}, m_ones);
-        draw_separator((Vector2){minutes_mid_x + 116, digital_clock_y});
-        // seconds
-        draw_full_number((Vector2){seconds_mid_x - 55, digital_clock_y}, s_tens);
-        draw_full_number((Vector2){seconds_mid_x + 55, digital_clock_y}, s_ones);
+        // Robot screen (800x600)
+        BeginScissorMode(SIDEBAR_W, 0, FRAME_W, FRAME_H);
+            DrawRectangle(SIDEBAR_W, 0, FRAME_W, FRAME_H, (Color){ 6, 8, 12, 255 });
+            DrawScene(state, &shown, t, stateT, blink, SIDEBAR_W, 0);
+        EndScissorMode();
 
-        // ANALOG CLOCK
-        analog_face((Vector2){analog_clock_x, analog_clock_y}, clock_radius);
-        // Clacualte Full Seconds
-        int hour12 = t->tm_hour % 12;
-        int full_seconds = hour12 * 3600 + t->tm_min * 60 + t->tm_sec;
-        draw_hour_hand((Vector2){analog_clock_x, analog_clock_y}, clock_radius/2, full_seconds);
-        draw_minute_hand((Vector2){analog_clock_x, analog_clock_y}, 3*clock_radius/4, full_seconds);
-        draw_second_hand((Vector2){analog_clock_x, analog_clock_y}, clock_radius, full_seconds);
-        DrawCircle(analog_clock_x, analog_clock_y, 10.0f, BLACK);
+        // Sidebar (200x600, scrollable)
+        BeginScissorMode(0, 0, SIDEBAR_W, WIN_H);
+            DrawRectangle(0, 0, SIDEBAR_W, WIN_H, (Color){ 36, 39, 48, 255 });
+            for (int i = 0; i < ST_COUNT; i++) {
+                Rectangle r = BtnRect(i, scroll);
+                bool hover = m.x < SIDEBAR_W && CheckCollisionPointRec(m, r);
+                Color bg = (i == (int)state) ? (Color){ 70, 110, 200, 255 }
+                         : hover ? (Color){ 70, 74, 90, 255 } : (Color){ 52, 56, 68, 255 };
+                DrawRectangleRounded(r, 0.25f, 8, bg);
+                const char *label = TextFormat("%d  %s", i + 1, STATE_NAMES[i]);
+                int w = MeasureText(label, 20);
+                DrawText(label, (int)(r.x + (r.width - w) / 2), (int)(r.y + (r.height - 20) / 2), 20, RAYWHITE);
+            }
+            if (maxScroll > 0) {
+                float barH = WIN_H * (float)WIN_H / contentH;
+                float barY = scroll / maxScroll * (WIN_H - barH);
+                DrawRectangle(SIDEBAR_W - 6, (int)barY, 4, (int)barH, GRAY);
+            }
+        EndScissorMode();
 
         EndDrawing();
     }
 
-    UnloadFont(clock_font);
     CloseWindow();
-
     return 0;
 }

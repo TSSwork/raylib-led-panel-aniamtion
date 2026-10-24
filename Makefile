@@ -1,7 +1,7 @@
 # Simple Makefile for Raylib with Wayland on Fedora
 CC = gcc
 CFLAGS = -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces
-TARGET = ai-avatar
+TARGET = build/ai-avatar
 SRC = main.c
 
 # Libraries needed for Wayland support
